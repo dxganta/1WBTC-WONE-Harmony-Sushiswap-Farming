@@ -1,0 +1,28 @@
+development:
+  - name: Ganache-CLI (Harmony-Mainnet Fork)
+    id: harmony-main-fork
+    cmd: ganache-cli
+    host: http://127.0.0.1
+    timeout: 120
+    cmd_settings:
+      port: 8545
+      gas_limit: 20000000
+      accounts: 10
+      evm_version: istanbul
+      mnemonic: brownie
+      fork: harmony-main
+      default_balance: 100000 ether
+
+live:
+  - name: Harmony
+    networks:
+      - name: Harmony Mainnet
+        chainid: 1666600000
+        id: harmony-main
+        host: https://api.harmony.one
+        explorer: https://explorer.harmony.one/
+      - name: Harmony Testnet
+        chainid: 1666700000
+        id: harmony-testnet
+        host: https://api.s0.b.hmny.io
+        explorer: ​https://explorer.pops.one/​

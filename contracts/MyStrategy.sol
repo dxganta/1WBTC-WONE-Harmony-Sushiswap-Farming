@@ -22,6 +22,10 @@ contract MyStrategy is BaseStrategy {
     address public lpComponent; // Token we provide liquidity with
     address public reward; // Token we farm and swap to want / lpComponent
 
+    address public constant SUSHISWAPV2ROUTER = 0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506;
+    address public constant MINICHEFV2 = 0x67dA5f2FfaDDfF067AB9d5F025F8810634d84287;
+    uint256 public constant poolPid = 5;
+
     // Used to signal to the Badger Tree that rewards where sent to it
     event TreeDistribution(
         address indexed token,
@@ -63,7 +67,7 @@ contract MyStrategy is BaseStrategy {
 
     // @dev Specify the name of the strategy
     function getName() external pure override returns (string memory) {
-        return "StrategyName";
+        return "1WBTC-ONE Sushiswap Farming Strategy";
     }
 
     // @dev Specify the version of the Strategy, for upgrades
