@@ -10,6 +10,8 @@ import "../deps/@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol
 import "../deps/@openzeppelin/contracts-upgradeable/token/ERC20/SafeERC20Upgradeable.sol";
 
 import "../interfaces/badger/IController.sol";
+import "../interfaces/sushiswap/IMiniChefV2.sol";
+import "../interfaces/uniswap/IUniswapRouterV2.sol";
 
 import {BaseStrategy} from "../deps/BaseStrategy.sol";
 
@@ -19,12 +21,15 @@ contract MyStrategy is BaseStrategy {
     using SafeMathUpgradeable for uint256;
 
     // address public want // Inherited from BaseStrategy, the token the strategy wants, swaps into and tries to grow
-    address public lpComponent; // Token we provide liquidity with
     address public reward; // Token we farm and swap to want / lpComponent
 
     address public constant SUSHISWAPV2ROUTER = 0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506;
     address public constant MINICHEFV2 = 0x67dA5f2FfaDDfF067AB9d5F025F8810634d84287;
-    uint256 public constant poolPid = 5;
+    uint256 public constant POOL_PID = 5;
+    address public constant wbtc = 0x3095c7557bCb296ccc6e363DE01b760bA031F2d9;
+    address public constant wone = 0xcF664087a5bB0237a0BAd6742852ec6c8d69A27a;
+    uint256 public constant MAX_PPM = 10**6; // PARTS PER MILLION 
+    uint32 public slippage_tolerance = 10000;  // in PPM, 10000 = 1%
 
     // Used to signal to the Badger Tree that rewards where sent to it
     event TreeDistribution(
@@ -40,7 +45,7 @@ contract MyStrategy is BaseStrategy {
         address _controller,
         address _keeper,
         address _guardian,
-        address[3] memory _wantConfig,
+        address[2] memory _wantConfig,
         uint256[3] memory _feeConfig
     ) public initializer {
         __BaseStrategy_init(
@@ -52,15 +57,17 @@ contract MyStrategy is BaseStrategy {
         );
         /// @dev Add config here
         want = _wantConfig[0];
-        lpComponent = _wantConfig[1];
-        reward = _wantConfig[2];
+        reward = _wantConfig[1];
 
         performanceFeeGovernance = _feeConfig[0];
         performanceFeeStrategist = _feeConfig[1];
         withdrawalFee = _feeConfig[2];
 
         /// @dev do one off approvals here
-        // IERC20Upgradeable(want).safeApprove(gauge, type(uint256).max);
+        IERC20Upgradeable(want).safeApprove(MINICHEFV2, type(uint256).max);
+        IERC20Upgradeable(reward).safeApprove(SUSHISWAPV2ROUTER,type(uint256).max);
+        IERC20Upgradeable(wone).safeApprove(SUSHISWAPV2ROUTER,type(uint256).max);
+        IERC20Upgradeable(wbtc).safeApprove(SUSHISWAPV2ROUTER,type(uint256).max);
     }
 
     /// ===== View Functions =====
@@ -77,7 +84,8 @@ contract MyStrategy is BaseStrategy {
 
     /// @dev Balance of want currently held in strategy positions
     function balanceOfPool() public view override returns (uint256) {
-        return 0;
+        (uint256 _pool, ) = IMiniChefV2(MINICHEFV2).userInfo(POOL_PID, address(this));
+        return _pool;
     }
 
     /// @dev Returns true if this strategy requires tending
@@ -94,8 +102,8 @@ contract MyStrategy is BaseStrategy {
     {
         address[] memory protectedTokens = new address[](3);
         protectedTokens[0] = want;
-        protectedTokens[1] = lpComponent;
-        protectedTokens[2] = reward;
+        protectedTokens[1] = reward;
+        protectedTokens[2] = wone;
         return protectedTokens;
     }
 
@@ -116,10 +124,19 @@ contract MyStrategy is BaseStrategy {
     /// @dev invest the amount of want
     /// @notice When this function is called, the controller has already sent want to this
     /// @notice Just get the current balance and then invest accordingly
-    function _deposit(uint256 _amount) internal override {}
+    function _deposit(uint256 _amount) internal override {
+        IMiniChefV2(MINICHEFV2).deposit(POOL_PID, _amount, address(this));
+    }
+
+    function testDeposit(uint256 _amount) external {
+        _deposit(_amount);
+    }
 
     /// @dev utility function to withdraw everything for migration
-    function _withdrawAll() internal override {}
+    function _withdrawAll() internal override {
+        // Withdraw all LP tokens from MCV2 and harvest rewards
+        IMiniChefV2(MINICHEFV2).withdrawAndHarvest(POOL_PID, balanceOfPool(), address(this));
+    }
 
     /// @dev withdraw the specified amount of want, liquidate from lpComponent to want, paying off any necessary debt for the conversion
     function _withdrawSome(uint256 _amount)
@@ -127,6 +144,11 @@ contract MyStrategy is BaseStrategy {
         override
         returns (uint256)
     {
+        uint256 _pool = balanceOfPool();
+        if (_amount > _pool) {
+            _amount = _pool;
+        }
+        IMiniChefV2(MINICHEFV2).withdraw(POOL_PID, _amount, address(this));
         return _amount;
     }
 
@@ -136,7 +158,52 @@ contract MyStrategy is BaseStrategy {
 
         uint256 _before = IERC20Upgradeable(want).balanceOf(address(this));
 
-        // Write your code here
+        // if there are no rewards then return 0
+        if (IMiniChefV2(MINICHEFV2).pendingSushi(POOL_PID, address(this)) == 0) {
+            return 0;
+        }
+
+        IMiniChefV2(MINICHEFV2).harvest(POOL_PID, address(this));
+
+        // convert SUSHI => WONE
+        address[] memory _path = new address[](2);
+        _path[0] = reward;
+        _path[1] = wone;
+
+        IUniswapRouterV2(SUSHISWAPV2ROUTER).swapExactTokensForTokens(
+            IERC20Upgradeable(reward).balanceOf(address(this)),
+         0, 
+         _path, 
+         address(this), 
+         now
+         );
+
+         // convert 50% WONE to WBTC
+         _path[0] = wone;
+         _path[1] = wbtc;
+        IUniswapRouterV2(SUSHISWAPV2ROUTER).swapExactTokensForTokens(
+            IERC20Upgradeable(wone).balanceOf(address(this)).mul(500000).div(MAX_PPM),
+            0, 
+            _path,
+            address(this),
+            now
+        );
+
+        // convert to WBTC/WONE LP Tokens
+        uint256 _wbtcAmt = IERC20Upgradeable(wbtc).balanceOf(address(this));
+        uint256 _woneAmt = IERC20Upgradeable(wone).balanceOf(address(this));
+        IUniswapRouterV2(SUSHISWAPV2ROUTER).addLiquidity(
+            wbtc,
+            wone,
+            _wbtcAmt,
+            _woneAmt,
+            // _wbtcAmt.mul(MAX_PPM - slippage_tolerance).div(MAX_PPM),
+            // _woneAmt.mul(MAX_PPM - slippage_tolerance).div(MAX_PPM),
+            1,
+            1,
+            address(this),
+            now
+        );
 
         uint256 earned =
             IERC20Upgradeable(want).balanceOf(address(this)).sub(_before);
@@ -144,23 +211,6 @@ contract MyStrategy is BaseStrategy {
         /// @notice Keep this in so you get paid!
         (uint256 governancePerformanceFee, uint256 strategistPerformanceFee) =
             _processRewardsFees(earned, reward);
-
-        // TODO: If you are harvesting a reward token you're not compounding
-        // You probably still want to capture fees for it
-        // // Process Sushi rewards if existing
-        // if (sushiAmount > 0) {
-        //     // Process fees on Sushi Rewards
-        //     // NOTE: Use this to receive fees on the reward token
-        //     _processRewardsFees(sushiAmount, SUSHI_TOKEN);
-
-        //     // Transfer balance of Sushi to the Badger Tree
-        //     // NOTE: Send reward to badgerTree
-        //     uint256 sushiBalance = IERC20Upgradeable(SUSHI_TOKEN).balanceOf(address(this));
-        //     IERC20Upgradeable(SUSHI_TOKEN).safeTransfer(badgerTree, sushiBalance);
-        //
-        //     // NOTE: Signal the amount of reward sent to the badger tree
-        //     emit TreeDistribution(SUSHI_TOKEN, sushiBalance, block.number, block.timestamp);
-        // }
 
         /// @dev Harvest event that every strategy MUST have, see BaseStrategy
         emit Harvest(earned, block.number);
@@ -179,6 +229,17 @@ contract MyStrategy is BaseStrategy {
     /// @dev Rebalance, Compound or Pay off debt here
     function tend() external whenNotPaused {
         _onlyAuthorizedActors();
+        uint256 bal = balanceOfWant();
+        if (bal > 0) {
+            _deposit(bal);
+        }
+    }
+
+    /// @dev set the slippage tolerance
+      function setSlippageTolerance(uint32 _val) external {
+        _onlyAuthorizedActors();
+        require(_val <= MAX_PPM);
+        slippage_tolerance = _val;
     }
 
     /// ===== Internal Helper Functions =====
@@ -203,3 +264,12 @@ contract MyStrategy is BaseStrategy {
         );
     }
 }
+
+
+// check if rewards are greater than zero
+
+// harvest sushi & one rewards
+// check if one rewards are in WONE or ONE 
+// convert SUSHI to WONE
+// Convert 50% of WONE to 1WBTC
+// convert 1WBTC & WONE to 1WBTC/WONE LP Tokens

@@ -2,7 +2,6 @@ from brownie import *
 from config import (
     BADGER_DEV_MULTISIG,
     WANT,
-    LP_COMPONENT,
     REWARD_TOKEN,
     PROTECTED_TOKENS,
     FEES
@@ -76,7 +75,6 @@ def deploy():
 
     # Set up tokens
     want = interface.IERC20(WANT)
-    lpComponent = interface.IERC20(LP_COMPONENT)
     rewardToken = interface.IERC20(REWARD_TOKEN)
 
     # Wire up Controller to Strart
@@ -84,16 +82,48 @@ def deploy():
     controller.approveStrategy(WANT, strategy, {"from": governance})
     controller.setStrategy(WANT, strategy, {"from": deployer})
 
-    # Uniswap some tokens here
-    router = Contract.from_explorer(
-        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    # Sushiswap some tokens here
+    router = interface.IUniswapRouterV2(
+        "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506")
+
+    WBTC = "0x3095c7557bcb296ccc6e363de01b760ba031f2d9"
+    WONE = "0xcF664087a5bB0237a0BAd6742852ec6c8d69A27a"
+
+    wbtc = interface.IERC20(WBTC)
+    wone = interface.IERC20(WONE)
+
+    wbtc.approve(router.address, 999999999999999999999999999999,
+                 {"from": deployer})
+    wone.approve(router.address, 999999999999999999999999999999,
+                 {"from": deployer})
+
+    # ONE -> WBTC
     router.swapExactETHForTokens(
-        0,  # Mint out
-        ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", WANT],
+        0,
+        [WONE, WBTC],
         deployer,
         9999999999999999,
-        {"from": deployer, "value": 5000000000000000000}
+        {"from": deployer, "value": 5 * 10**10 * 10**18}
     )
+
+    # ONE -> WONE
+    interface.IWETH(WONE).deposit(
+        {"from": deployer, "value": 5 * 10**10 * 10**18})
+
+    # Swap them for WBTC-WONE
+    router.addLiquidity(
+        wbtc,
+        wone,
+        wbtc.balanceOf(deployer),
+        wone.balanceOf(deployer),
+        1,
+        1,
+        deployer,
+        9999999999999999,
+        {"from": deployer}
+    )
+
+    want.transfer(strategy, want.balanceOf(deployer), {"from": deployer})
 
     return DotMap(
         deployer=deployer,
@@ -103,6 +133,5 @@ def deploy():
         strategy=strategy,
         # guestList=guestList,
         want=want,
-        lpComponent=lpComponent,
         rewardToken=rewardToken
     )

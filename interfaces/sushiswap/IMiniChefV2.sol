@@ -20,10 +20,6 @@ interface IMiniChefV2 {
 
     function poolLength() external view returns (uint256);
 
-    function updatePool(uint256 pid)
-        external
-        returns (IMiniChefV2.PoolInfo memory);
-
     function userInfo(uint256 _pid, address _user)
         external
         view
@@ -37,6 +33,11 @@ interface IMiniChefV2 {
             uint64,
             uint64
         );
+
+    function pendingSushi(uint256 _pid, address _user)
+        external
+        view
+        returns (uint256 pending);
 
     function deposit(
         uint256 pid,
@@ -59,9 +60,4 @@ interface IMiniChefV2 {
     ) external;
 
     function emergencyWithdraw(uint256 pid, address to) external;
-
-    function pendingSushi(uint256 _pid, address _user)
-        external
-        view
-        returns (uint256 pending);
 }

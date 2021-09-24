@@ -8,7 +8,6 @@ from brownie import (
 from config import (
     BADGER_DEV_MULTISIG,
     WANT,
-    LP_COMPONENT,
     REWARD_TOKEN,
     PROTECTED_TOKENS,
     FEES,
@@ -31,7 +30,8 @@ def deployed():
     governance = accounts.at(BADGER_DEV_MULTISIG, force=True)
 
     controller = Controller.deploy({"from": deployer})
-    controller.initialize(BADGER_DEV_MULTISIG, strategist, keeper, BADGER_DEV_MULTISIG)
+    controller.initialize(BADGER_DEV_MULTISIG, strategist,
+                          keeper, BADGER_DEV_MULTISIG)
 
     sett = SettV3.deploy({"from": deployer})
     sett.initialize(
@@ -48,14 +48,14 @@ def deployed():
     sett.unpause({"from": governance})
     controller.setVault(WANT, sett)
 
-    ## TODO: Add guest list once we find compatible, tested, contract
+    # TODO: Add guest list once we find compatible, tested, contract
     # guestList = VipCappedGuestListWrapperUpgradeable.deploy({"from": deployer})
     # guestList.initialize(sett, {"from": deployer})
     # guestList.setGuests([deployer], [True])
     # guestList.setUserDepositCap(100000000)
     # sett.setGuestList(guestList, {"from": governance})
 
-    ## Start up Strategy
+    #  Start up Strategy
     strategy = MyStrategy.deploy({"from": deployer})
     strategy.initialize(
         BADGER_DEV_MULTISIG,
@@ -67,26 +67,56 @@ def deployed():
         FEES,
     )
 
-    ## Tool that verifies bytecode (run independently) <- Webapp for anyone to verify
+    # Tool that verifies bytecode (run independently) <- Webapp for anyone to verify
 
-    ## Set up tokens
+    # Set up tokens
     want = interface.IERC20(WANT)
-    lpComponent = interface.IERC20(LP_COMPONENT)
     rewardToken = interface.IERC20(REWARD_TOKEN)
 
-    ## Wire up Controller to Strart
-    ## In testing will pass, but on live it will fail
+    #  Wire up Controller to Strart
+    #  In testing will pass, but on live it will fail
     controller.approveStrategy(WANT, strategy, {"from": governance})
     controller.setStrategy(WANT, strategy, {"from": deployer})
 
-    ## Uniswap some tokens here
-    router = interface.IUniswapRouterV2("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    # Sushiswap some tokens here
+    router = interface.IUniswapRouterV2(
+        "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506")
+
+    WBTC = "0x3095c7557bcb296ccc6e363de01b760ba031f2d9"
+    WONE = "0xcF664087a5bB0237a0BAd6742852ec6c8d69A27a"
+
+    wbtc = interface.IERC20(WBTC)
+    wone = interface.IERC20(WONE)
+
+    wbtc.approve(router.address, 999999999999999999999999999999,
+                 {"from": deployer})
+    wone.approve(router.address, 999999999999999999999999999999,
+                 {"from": deployer})
+
+    # ONE -> WBTC
     router.swapExactETHForTokens(
-        0,  ## Mint out
-        ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", WANT],
+        0,
+        [WONE, WBTC],
         deployer,
         9999999999999999,
-        {"from": deployer, "value": 5000000000000000000},
+        {"from": deployer, "value": 5 * 10**10 * 10**18}
+    )
+
+    # ONE -> WONE
+    interface.IWETH(WONE).deposit(
+        {"from": deployer, "value": 5 * 10**10 * 10**18})
+
+    # Swap them for WBTC-WONE
+    router.addLiquidity(
+        wbtc,
+        wone,
+        wbtc.balanceOf(deployer),
+        wone.balanceOf(deployer),
+        1,
+        1,
+        deployer,
+        9999999999999999,
+        {"from": deployer}
     )
 
     return DotMap(
@@ -97,7 +127,6 @@ def deployed():
         strategy=strategy,
         # guestList=guestList,
         want=want,
-        lpComponent=lpComponent,
         rewardToken=rewardToken,
     )
 
@@ -135,7 +164,7 @@ def want(deployed):
 
 @pytest.fixture
 def tokens():
-    return [WANT, LP_COMPONENT, REWARD_TOKEN]
+    return [WANT, REWARD_TOKEN]
 
 
 ## Accounts ##
