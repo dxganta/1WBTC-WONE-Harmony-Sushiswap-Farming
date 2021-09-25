@@ -1,7 +1,5 @@
 # 1WBTC-WONE Sushiswap Yield Farming on Harmony Mainnet
-
-
-
+<img src="https://user-images.githubusercontent.com/47485188/134777888-d7573e4f-7c46-46c1-a92d-a23d1ceec645.png"></img>
 ## Deposit
 The strategy takes WBTC-WONE LP tokens as deposit and deposits them to Sushiswap's 1WBTC/WONE Liquidity Pool for Yield Generation.
 
@@ -76,7 +74,6 @@ Deployment will set up a Vault, Controller and deploy your strategy
   {
       'controller': 0x602C71e4DAC47a042Ee7f46E0aee17F94A3bA0B6,
       'deployer': 0x66aB6D9362d4F35596279692F0251Db635165871,
-      'lpComponent': 0x028171bCA77440897B824Ca71D1c56caC55b68A3,
       'rewardToken': 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9,
       'sett': 0x6951b5Bd815043E3F842c1b026b0Fa888Cc2DD85,
       'strategy': 0x9E4c14403d7d9A8A782044E86a93CAE09D7B2ac9,
@@ -85,14 +82,27 @@ Deployment will set up a Vault, Controller and deploy your strategy
   }
   >>>
 
-  ## Deploy also uniswaps want to the deployer (accounts[0]), so you have funds to play with!
+  ## Deploy also sushiswaps want to the deployer (accounts[0]), so you have funds to play with!
   >>> deployed.want.balanceOf(a[0])
   240545908911436022026
 
 ```
 
 ## Tests
-To run the tests
+Due to some problem with the RPC provider (most probably), running all the tests together causes some weird errors. Therefore, it is 
+needed to run each test file independently one by one.
 ```
-brownie test
+brownie test tests/test_profitable.py 
+```
+```
+brownie test tests/examples/test_basic.py
+```
+```
+brownie test tests/examples/test_are_you_trying.py
+```
+```
+brownie test tests/examples/test_harvest_flow.py
+```
+```
+brownie test tests/examples/test_strategy_permissions.py
 ```
