@@ -29,7 +29,7 @@ contract MyStrategy is BaseStrategy {
     address public constant wbtc = 0x3095c7557bCb296ccc6e363DE01b760bA031F2d9;
     address public constant wone = 0xcF664087a5bB0237a0BAd6742852ec6c8d69A27a;
     uint256 public constant MAX_PPM = 10**6; // PARTS PER MILLION 
-    uint32 public slippage_tolerance = 10000;  // in PPM, 10000 = 1%
+    uint32 public slippage_tolerance = 5000;  // in PPM, 5000 = 0.5%
 
     // Used to signal to the Badger Tree that rewards where sent to it
     event TreeDistribution(
@@ -179,6 +179,7 @@ contract MyStrategy is BaseStrategy {
          );
 
          // convert 50% WONE to WBTC
+         _path = new address[](2);
          _path[0] = wone;
          _path[1] = wbtc;
         IUniswapRouterV2(SUSHISWAPV2ROUTER).swapExactTokensForTokens(
@@ -197,10 +198,8 @@ contract MyStrategy is BaseStrategy {
             wone,
             _wbtcAmt,
             _woneAmt,
-            // _wbtcAmt.mul(MAX_PPM - slippage_tolerance).div(MAX_PPM),
-            // _woneAmt.mul(MAX_PPM - slippage_tolerance).div(MAX_PPM),
-            1,
-            1,
+            _wbtcAmt.mul(MAX_PPM - slippage_tolerance).div(MAX_PPM),
+            _woneAmt.mul(MAX_PPM - slippage_tolerance).div(MAX_PPM),
             address(this),
             now
         );
@@ -210,7 +209,7 @@ contract MyStrategy is BaseStrategy {
 
         /// @notice Keep this in so you get paid!
         (uint256 governancePerformanceFee, uint256 strategistPerformanceFee) =
-            _processRewardsFees(earned, reward);
+            _processRewardsFees(earned, want);
 
         /// @dev Harvest event that every strategy MUST have, see BaseStrategy
         emit Harvest(earned, block.number);

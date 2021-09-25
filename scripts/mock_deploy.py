@@ -103,12 +103,12 @@ def deploy():
         [WONE, WBTC],
         deployer,
         9999999999999999,
-        {"from": deployer, "value": 5 * 10**10 * 10**18}
+        {"from": deployer, "value": 500000 * 10**18}
     )
 
     # ONE -> WONE
     interface.IWETH(WONE).deposit(
-        {"from": deployer, "value": 5 * 10**10 * 10**18})
+        {"from": deployer, "value": 500000 * 10**18})
 
     # Swap them for WBTC-WONE
     router.addLiquidity(
