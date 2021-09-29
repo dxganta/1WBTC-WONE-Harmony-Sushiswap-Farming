@@ -42,7 +42,7 @@ brownie networks modify harmony-main-fork default_balance="1000000 ether"
 
 ## Basic Use
 
-To deploy the demo Badger Strategy in a development environment:
+To deploy the Strategy in a development environment:
 
 1. Open the Brownie console. This automatically launches Ganache on a forked mainnet.
 
